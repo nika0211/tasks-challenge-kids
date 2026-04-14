@@ -1,5 +1,5 @@
 {
-  "buildCommand": null,
+  "buildCommand": "echo no-build",
   "outputDirectory": "public",
-  "installCommand": null
+  "installCommand": "echo no-install"
 }
