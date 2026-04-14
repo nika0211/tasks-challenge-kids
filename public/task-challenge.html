@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>אתגר המשימות</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Lucide icons (vanilla UMD) -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+  <!-- Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; min-height: 100vh; }
+    body {
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #1e3a5f 100%);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+    .bg-photo {
+      position: fixed; inset: 0; z-index: 0;
+      background: url('https://i.ibb.co/v6mB6m0/image-599e08.jpg') center/cover no-repeat;
+      opacity: 0.18; pointer-events: none;
+    }
+    #root { position: relative; z-index: 1; }
+    .glass {
+      background: rgba(255,255,255,0.18);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.25);
+    }
+    @keyframes shake {
+      0%,100%{transform:translateX(0)}
+      20%{transform:translateX(-8px)}
+      40%{transform:translateX(8px)}
+      60%{transform:translateX(-6px)}
+      80%{transform:translateX(6px)}
+    }
+    .shake { animation: shake 0.4s ease; }
+    @keyframes pop {
+      0%  { transform:scale(0.85); opacity:0 }
+      70% { transform:scale(1.06) }
+      100%{ transform:scale(1);   opacity:1 }
+    }
+    .pop { animation: pop 0.35s ease forwards; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin-anim { animation: spin 1s linear infinite; }
+  </style>
+</head>
+<body>
+  <div class="bg-photo"></div>
+  <div id="root"></div>
+
+  <footer style="
+    position: fixed; bottom: 0; left: 0; right: 0;
+    text-align: center; padding: 10px 16px;
+    color: rgba(255,255,255,0.30);
+    font-size: 11px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    letter-spacing: 0.04em;
+    z-index: 50;
+    pointer-events: none;
+    user-select: none;
+  ">© כל הזכויות שמורות לניר ג'נח</footer>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+/* ─── Firebase REST helpers ──────────────────────────────── */
+const DB = 'https://tasks-challenge-kids-default-rtdb.firebaseio.com';
+
+const fbGet  = () => fetch(`${DB}/.json`).then(r => r.json());
+const fbPut  = (path, val) => fetch(`${DB}/${path}.json`, { method:'PUT',  body:JSON.stringify(val) });
+const fbPost = (path, val) => fetch(`${DB}/${path}.json`, { method:'POST', body:JSON.stringify(val) });
+const fbDel   = (path)      => fetch(`${DB}/${path}.json`, { method:'DELETE' });
+const fbPatch = (path, val) => fetch(`${DB}/${path}.json`, { method:'PATCH', body:JSON.stringify(val) });
+
+/* ─── Constants ─────────────────────────────────────────── */
+const CHILDREN = [
+  { name:'שקד',  pin:'1111', gradient:'from-blue-500 to-blue-700',    bg:'bg-blue-500',   initial:'ש' },
+  { name:'טוהר', pin:'2222', gradient:'from-purple-500 to-purple-700', bg:'bg-purple-500', initial:'ט' },
+  { name:'אפרת', pin:'3333', gradient:'from-pink-500 to-rose-600',     bg:'bg-pink-500',   initial:'א' },
+  { name:'איתן', pin:'4444', gradient:'from-green-500 to-emerald-700', bg:'bg-green-500',  initial:'א' },
+];
+const PARENT_PIN = '0211';
+const TASKS = [
+  { id:1,  name:'כיבוי מסכים בשעה 22:00',       points:5, icon:'📱' },
+  { id:2,  name:'לקום בזמן לבית הספר',           points:3, icon:'⏰' },
+  { id:3,  name:'ניקיון שירותים',                 points:4, icon:'🚽' },
+  { id:4,  name:'שטיפת רכב חיצוני',              points:3, icon:'🚗' },
+  { id:5,  name:'להוציא את שאבי (פודל חום)',      points:2, icon:'🐩' },
+  { id:6,  name:'סידור הבית',                     points:2, icon:'🏠' },
+  { id:7,  name:'ללכת למכולת',                    points:2, icon:'🛒' },
+  { id:8,  name:'קיפול כביסה (כולל הורדה)',       points:2, icon:'🧺' },
+  { id:9,  name:'פינוי מדיח',                     points:2, icon:'🧼' },
+  { id:10, name:'סידור החדר',                     points:2, icon:'🧹' },
+  { id:11, name:'סידור מיטה',                     points:1, icon:'🛏️' },
+  { id:12, name:'עזרה בהכנת ארוחה',              points:3, icon:'🍳' },
+  { id:13, name:'זריקת זבל',                      points:1, icon:'🗑️' },
+  { id:14, name:'להחזיר עגלת סופר למטה',                    points:1, icon:'🛒' },
+  { id:15, name:'הכנת אוכל לבית הספר',                      points:2, icon:'🥪' },
+  { id:16, name:'נסיעה באוטובוס לבית הספר והגעה בזמן',      points:2, icon:'🚌' },
+];
+const INIT_POINTS = { שקד:0, טוהר:0, אפרת:0, איתן:0 };
+
+/* ─── Confetti ───────────────────────────────────────────── */
+function fireConfetti() {
+  const colors = ['#f59e0b','#3b82f6','#ec4899','#10b981','#8b5cf6','#ef4444'];
+  confetti({ particleCount:180, spread:90, origin:{ y:0.55 }, colors });
+  setTimeout(() => confetti({ particleCount:80, spread:60, origin:{ y:0.45, x:0.3 }, colors }), 200);
+  setTimeout(() => confetti({ particleCount:80, spread:60, origin:{ y:0.45, x:0.7 }, colors }), 350);
+}
+
+/* ─── Sounds ─────────────────────────────────────────────── */
+function playSound(type) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = type === 'done'
+      ? [{ f:440, t:0 }, { f:660, t:0.15 }]
+      : [{ f:523, t:0 }, { f:659, t:0.1 }, { f:784, t:0.2 }, { f:1047, t:0.32 }];
+    notes.forEach(({ f, t }) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = f;
+      osc.type = 'sine';
+      const s = ctx.currentTime + t;
+      gain.gain.setValueAtTime(0.28, s);
+      gain.gain.exponentialRampToValueAtTime(0.001, s + 0.35);
+      osc.start(s);
+      osc.stop(s + 0.36);
+    });
+  } catch(e) { /* audio not available */ }
+}
+
+/* ─── Icon ───────────────────────────────────────────────── */
+function Icon({ name, size=20, className='' }) {
+  return (
+    <i
+      data-lucide={name}
+      style={{ width:size, height:size, display:'inline-flex', flexShrink:0 }}
+      className={className}
+    />
+  );
+}
+
+/* ─── Back button ────────────────────────────────────────── */
+function BackBtn({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1 text-white/70 hover:text-white transition-colors mb-5"
+    >
+      <Icon name="chevron-right" size={18} />
+      <span className="text-sm font-semibold">חזור</span>
+    </button>
+  );
+}
+
+/* ─── PIN Pad ────────────────────────────────────────────── */
+function PinPad({ value, onChange, onSubmit, accentGradient='from-blue-500 to-blue-700' }) {
+  const KEYS = ['1','2','3','4','5','6','7','8','9','←','0','✓'];
+  const handle = k => {
+    if      (k === '←') onChange(value.slice(0, -1));
+    else if (k === '✓') onSubmit();
+    else if (value.length < 4) onChange(value + k);
+  };
+  return (
+    <div className="flex flex-col items-center gap-5">
+      {/* dots */}
+      <div className="flex gap-3">
+        {[0,1,2,3].map(i => (
+          <div
+            key={i}
+            className={`w-5 h-5 rounded-full border-2 border-white/70 transition-all duration-200
+              ${i < value.length ? 'bg-white scale-110' : 'bg-white/10'}`}
+          />
+        ))}
+      </div>
+      {/* grid */}
+      <div className="grid grid-cols-3 gap-3">
+        {KEYS.map(k => (
+          <button
+            key={k}
+            onClick={() => handle(k)}
+            className={`w-[4.2rem] h-[4.2rem] rounded-[1.8rem] text-xl font-bold text-white shadow-lg
+              active:scale-90 transition-all duration-150 select-none
+              ${k==='✓' ? `bg-gradient-to-br ${accentGradient} shadow-xl`
+                : k==='←' ? 'bg-red-400/40 hover:bg-red-400/60'
+                : 'glass hover:bg-white/30'}`}
+          >{k}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Loading Screen ─────────────────────────────────────── */
+function LoadingScreen() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="glass rounded-[3rem] p-10 shadow-2xl flex flex-col items-center gap-5">
+        <div className="w-14 h-14 rounded-full border-4 border-white/30 border-t-white spin-anim" />
+        <p className="text-white font-bold text-lg">מתחבר לבסיס הנתונים...</p>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Welcome Screen ─────────────────────────────────────── */
+function WelcomeScreen({ onSelect }) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen p-5">
+      <div className="glass rounded-[3rem] p-8 shadow-2xl w-full max-w-sm pop">
+        {/* logo */}
+        <div className="flex flex-col items-center mb-7">
+          <div className="w-20 h-20 rounded-[2rem] bg-gradient-to-br from-amber-400 to-orange-500
+            flex items-center justify-center shadow-2xl mb-4">
+            <Icon name="trophy" size={40} className="text-white" />
+          </div>
+          <h1 className="text-3xl font-black text-white drop-shadow-lg tracking-tight">אתגר המשימות</h1>
+          <p className="text-white/70 mt-1 text-sm">מי נכנס למערכת?</p>
+        </div>
+
+        {/* children */}
+        <div className="flex flex-col gap-3 mb-3">
+          {CHILDREN.map(child => (
+            <button
+              key={child.name}
+              onClick={() => onSelect(child.name, 'child')}
+              className={`flex items-center gap-4 p-4 rounded-[2rem] bg-gradient-to-r ${child.gradient}
+                shadow-xl active:scale-95 transition-transform`}
+            >
+              <div className="w-11 h-11 rounded-full bg-white/25 flex items-center justify-center
+                text-lg font-black text-white">
+                {child.initial}
+              </div>
+              <span className="text-white font-bold text-lg">{child.name}</span>
+              <Icon name="chevron-left" size={18} className="text-white/60 mr-auto" />
+            </button>
+          ))}
+        </div>
+
+        {/* parent */}
+        <button
+          onClick={() => onSelect('הורים', 'parent')}
+          className="flex items-center gap-4 p-4 rounded-[2rem] bg-gradient-to-r from-slate-600 to-slate-800
+            shadow-xl active:scale-95 transition-transform w-full mt-1"
+        >
+          <div className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center">
+            <Icon name="shield-check" size={22} className="text-white" />
+          </div>
+          <span className="text-white font-bold text-lg">ניהול הורים</span>
+          <Icon name="chevron-left" size={18} className="text-white/60 mr-auto" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── PIN Screen ─────────────────────────────────────────── */
+function PinScreen({ userName, userRole, correctPin, onBack, onSuccess }) {
+  const [pin,   setPin]   = useState('');
+  const [shake, setShake] = useState(false);
+  const [err,   setErr]   = useState('');
+  const child = CHILDREN.find(c => c.name === userName);
+
+  const submit = () => {
+    if (pin === correctPin) {
+      onSuccess();
+    } else {
+      setShake(true); setErr('קוד שגוי, נסה שוב'); setPin('');
+      setTimeout(() => { setShake(false); setErr(''); }, 700);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen p-5">
+      <div className="glass rounded-[3rem] p-8 shadow-2xl w-full max-w-sm pop">
+        <BackBtn onClick={onBack} />
+
+        <div className="flex flex-col items-center mb-7">
+          <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center shadow-2xl mb-4
+            ${child ? `bg-gradient-to-br ${child.gradient}` : 'bg-gradient-to-br from-slate-600 to-slate-800'}`}>
+            {child
+              ? <span className="text-3xl font-black text-white">{child.initial}</span>
+              : <Icon name="shield-check" size={38} className="text-white" />}
+          </div>
+          <h2 className="text-2xl font-black text-white">{userName}</h2>
+          <p className="text-white/60 text-sm mt-1">הזן קוד סודי</p>
+        </div>
+
+        <div className={shake ? 'shake' : ''}>
+          {err && <p className="text-red-300 text-sm font-bold text-center mb-3">{err}</p>}
+          <PinPad
+            value={pin}
+            onChange={setPin}
+            onSubmit={submit}
+            accentGradient={child ? child.gradient : 'from-slate-600 to-slate-800'}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Set PIN Screen (first login) ───────────────────────── */
+function SetPinScreen({ userName, defaultPin, onSetPin, onBack }) {
+  const [step,    setStep]    = useState(1); // 1 = choose, 2 = confirm
+  const [pin1,    setPin1]    = useState('');
+  const [pin2,    setPin2]    = useState('');
+  const [shake,   setShake]   = useState(false);
+  const [err,     setErr]     = useState('');
+  const [saving,  setSaving]  = useState(false);
+  const child = CHILDREN.find(c => c.name === userName);
+
+  const triggerErr = msg => {
+    setShake(true); setErr(msg);
+    if (step === 1) setPin1(''); else setPin2('');
+    setTimeout(() => { setShake(false); setErr(''); }, 700);
+  };
+
+  const handleStep1 = () => {
+    if (pin1.length < 4) { triggerErr('יש להזין 4 ספרות'); return; }
+    if (pin1 === defaultPin) { triggerErr('הקוד החדש חייב להיות שונה מהקוד הנוכחי!'); return; }
+    setStep(2);
+  };
+
+  const handleStep2 = async () => {
+    if (pin2 !== pin1) { triggerErr('הקודים אינם תואמים, נסה שוב'); return; }
+    setSaving(true);
+    await onSetPin(pin1);
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen p-5">
+      <div className="glass rounded-[3rem] p-8 shadow-2xl w-full max-w-sm pop">
+        {step === 1 && <BackBtn onClick={onBack} />}
+
+        {/* Avatar + title */}
+        <div className="flex flex-col items-center mb-6">
+          <div className={`w-20 h-20 rounded-[2rem] bg-gradient-to-br ${child.gradient}
+            flex items-center justify-center shadow-2xl mb-4 relative`}>
+            <span className="text-3xl font-black text-white">{child.initial}</span>
+            {/* lock badge */}
+            <div className="absolute -bottom-2 -left-2 w-8 h-8 rounded-full bg-amber-400
+              flex items-center justify-center shadow-lg">
+              <Icon name="lock" size={14} className="text-slate-900" />
+            </div>
+          </div>
+          <h2 className="text-2xl font-black text-white">{userName}</h2>
+
+          {step === 1 ? (
+            <div className="mt-3 px-4 py-3 rounded-2xl bg-amber-400/15 border border-amber-400/30 text-center">
+              <p className="text-amber-300 font-bold text-sm">כניסה ראשונה!</p>
+              <p className="text-white/70 text-xs mt-1">בחר קוד סודי אישי שרק אתה יודע</p>
+            </div>
+          ) : (
+            <div className="mt-3 px-4 py-3 rounded-2xl bg-blue-400/15 border border-blue-400/30 text-center">
+              <p className="text-blue-300 font-bold text-sm">אשר את הקוד שלך</p>
+              <p className="text-white/70 text-xs mt-1">הזן שוב את הקוד שבחרת</p>
+            </div>
+          )}
+        </div>
+
+        {/* Step indicator */}
+        <div className="flex items-center justify-center gap-2 mb-5">
+          <div className={`h-1.5 w-10 rounded-full transition-all ${step >= 1 ? `bg-gradient-to-r ${child.gradient}` : 'bg-white/20'}`} />
+          <div className={`h-1.5 w-10 rounded-full transition-all ${step >= 2 ? `bg-gradient-to-r ${child.gradient}` : 'bg-white/20'}`} />
+        </div>
+
+        <div className={shake ? 'shake' : ''}>
+          {err && <p className="text-red-300 text-sm font-bold text-center mb-3">{err}</p>}
+          {saving ? (
+            <div className="flex flex-col items-center gap-3 py-4">
+              <div className="w-10 h-10 rounded-full border-4 border-white/30 border-t-white spin-anim" />
+              <p className="text-white/70 text-sm">שומר קוד...</p>
+            </div>
+          ) : step === 1 ? (
+            <PinPad value={pin1} onChange={setPin1} onSubmit={handleStep1} accentGradient={child.gradient} />
+          ) : (
+            <PinPad value={pin2} onChange={setPin2} onSubmit={handleStep2} accentGradient={child.gradient} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Change PIN Screen ──────────────────────────────────── */
+function ChangePinScreen({ userName, currentPin, onChangePin, onBack }) {
+  // step 1: verify old PIN, step 2: enter new PIN, step 3: confirm new PIN
+  const [step,   setStep]   = useState(1);
+  const [old,    setOld]    = useState('');
+  const [pin1,   setPin1]   = useState('');
+  const [pin2,   setPin2]   = useState('');
+  const [shake,  setShake]  = useState(false);
+  const [err,    setErr]    = useState('');
+  const [saving, setSaving] = useState(false);
+  const [done,   setDone]   = useState(false);
+  const child = CHILDREN.find(c => c.name === userName);
+
+  // Auto-navigate back after success
+  useEffect(() => {
+    if (done) {
+      const t = setTimeout(onBack, 1600);
+      return () => clearTimeout(t);
+    }
+  }, [done]);
+
+  const triggerErr = (msg, clearFn) => {
+    setShake(true); setErr(msg); if (clearFn) clearFn();
+    setTimeout(() => { setShake(false); setErr(''); }, 700);
+  };
+
+  const handleStep1 = () => {
+    if (old !== currentPin) {
+      triggerErr('הקוד הנוכחי שגוי', () => setOld(''));
+      return;
+    }
+    setStep(2);
+  };
+
+  const handleStep2 = () => {
+    if (pin1.length < 4) { triggerErr('יש להזין 4 ספרות', () => setPin1('')); return; }
+    if (pin1 === currentPin) { triggerErr('הקוד החדש חייב להיות שונה מהנוכחי', () => setPin1('')); return; }
+    setStep(3);
+  };
+
+  const handleStep3 = async () => {
+    if (pin2 !== pin1) { triggerErr('הקודים אינם תואמים', () => setPin2('')); return; }
+    setSaving(true);
+    await onChangePin(pin1);
+    setSaving(false);
+    setDone(true);
+  };
+
+  const curVal    = step === 1 ? old  : step === 2 ? pin1 : pin2;
+  const setCurVal = step === 1 ? setOld : step === 2 ? setPin1 : setPin2;
+  const handleSub = step === 1 ? handleStep1 : step === 2 ? handleStep2 : handleStep3;
+
+  const stepLabels = ['הזן את הקוד הנוכחי', 'בחר קוד חדש (4 ספרות)', 'אשר את הקוד החדש'];
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen p-5">
+      <div className="glass rounded-[3rem] p-8 shadow-2xl w-full max-w-sm pop">
+        {!done && <BackBtn onClick={onBack} />}
+
+        {/* Avatar + title */}
+        <div className="flex flex-col items-center mb-6">
+          <div className={`w-20 h-20 rounded-[2rem] bg-gradient-to-br ${child.gradient}
+            flex items-center justify-center shadow-2xl mb-4 relative`}>
+            <span className="text-3xl font-black text-white">{child.initial}</span>
+            <div className="absolute -bottom-2 -left-2 w-8 h-8 rounded-full bg-sky-400
+              flex items-center justify-center shadow-lg">
+              <Icon name="key" size={14} className="text-white" />
+            </div>
+          </div>
+          <h2 className="text-2xl font-black text-white">שינוי קוד סודי</h2>
+          <p className="text-white/60 text-sm mt-0.5">{userName}</p>
+
+          {!done && (
+            <div className="mt-3 px-4 py-2 rounded-2xl bg-sky-400/15 border border-sky-400/30 text-center">
+              <p className="text-sky-300 font-bold text-xs">{stepLabels[step - 1]}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Step indicator */}
+        {!done && (
+          <div className="flex items-center justify-center gap-2 mb-5">
+            {[1,2,3].map(s => (
+              <div key={s} className={`h-1.5 w-8 rounded-full transition-all
+                ${step >= s ? `bg-gradient-to-r ${child.gradient}` : 'bg-white/20'}`} />
+            ))}
+          </div>
+        )}
+
+        {done ? (
+          <div className="flex flex-col items-center gap-4 py-6">
+            <div className="w-16 h-16 rounded-full bg-green-400/20 flex items-center justify-center">
+              <Icon name="check-circle-2" size={44} className="text-green-400" />
+            </div>
+            <p className="text-white font-black text-xl text-center">הקוד שונה בהצלחה!</p>
+            <p className="text-white/50 text-sm text-center">חוזר לדף הבית...</p>
+          </div>
+        ) : saving ? (
+          <div className="flex flex-col items-center gap-3 py-4">
+            <div className="w-10 h-10 rounded-full border-4 border-white/30 border-t-white spin-anim" />
+            <p className="text-white/70 text-sm">שומר קוד...</p>
+          </div>
+        ) : (
+          <div className={shake ? 'shake' : ''}>
+            {err && <p className="text-red-300 text-sm font-bold text-center mb-3">{err}</p>}
+            <PinPad
+              value={curVal}
+              onChange={setCurVal}
+              onSubmit={handleSub}
+              accentGradient={child.gradient}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Child Dashboard ────────────────────────────────────── */
+function ChildDashboard({ userName, gs, onTask, onBack, onChangePinRequest }) {
+  const child    = CHILDREN.find(c => c.name === userName);
+  const myPoints = gs.points[userName] || 0;
+  const pendingIds = new Set(
+    gs.pendingTasks.filter(t => t.childName === userName).map(t => t.taskId)
+  );
+  const [justDone, setJustDone] = useState(null);
+
+  const handle = task => {
+    setJustDone(task.id);
+    setTimeout(() => setJustDone(null), 800);
+    onTask(task);
+  };
+
+  return (
+    <div className="flex flex-col min-h-screen p-4 pb-10 gap-4">
+      {/* header */}
+      <div className="glass rounded-[3rem] p-6 shadow-2xl mt-4 pop">
+        <BackBtn onClick={onBack} />
+        <div className="flex items-center gap-4">
+          <div className={`w-16 h-16 rounded-[1.5rem] bg-gradient-to-br ${child.gradient}
+            flex items-center justify-center text-2xl font-black text-white shadow-xl`}>
+            {child.initial}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-2xl font-black text-white">שלום, {userName}!</h2>
+            <div className="flex items-center gap-1.5 mt-1">
+              <Icon name="star" size={16} className="text-amber-400" />
+              <span className="text-amber-300 font-bold text-lg">{myPoints} נקודות</span>
+            </div>
+            {/* Change password link */}
+            <button
+              onClick={onChangePinRequest}
+              className="flex items-center gap-1 mt-2 text-white/40 hover:text-white/70 transition-colors"
+            >
+              <Icon name="key" size={12} className="text-white/40" />
+              <span className="text-xs">שינוי קוד סודי</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <p className="text-white/80 font-bold px-2">משימות זמינות:</p>
+
+      <div className="flex flex-col gap-3">
+        {TASKS.map(task => {
+          const isPending = pendingIds.has(task.id);
+          return (
+            <div
+              key={task.id}
+              className={`glass rounded-[2rem] p-5 shadow-xl flex items-center gap-4 transition-all
+                ${justDone === task.id ? 'scale-95 opacity-50' : 'pop'}`}
+            >
+              <div className={`w-12 h-12 rounded-[1.2rem] flex items-center justify-center shadow-md
+                flex-shrink-0 ${isPending ? 'bg-amber-400/30' : `bg-gradient-to-br ${child.gradient}`}`}>
+                <span className="text-2xl leading-none">{task.icon}</span>
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-semibold text-sm leading-snug">{task.name}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <Icon name="zap" size={12} className="text-amber-400" />
+                  <span className="text-amber-300 text-xs font-bold">{task.points} נקודות</span>
+                </div>
+              </div>
+
+              {isPending ? (
+                <div className="flex items-center gap-1.5 bg-amber-400/20 px-3 py-2 rounded-full flex-shrink-0">
+                  <Icon name="clock" size={14} className="text-amber-400" />
+                  <span className="text-amber-300 text-xs font-bold">ממתין</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handle(task)}
+                  className={`bg-gradient-to-br ${child.gradient} text-white text-xs font-bold
+                    px-5 py-2.5 rounded-full shadow-lg active:scale-90 transition-transform flex-shrink-0`}
+                >
+                  בוצע!
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Parent Dashboard ───────────────────────────────────── */
+function ParentDashboard({ gs, onApprove, onReject, onDeduct, onBack }) {
+  const sorted   = [...CHILDREN].sort((a,b) => (gs.points[b.name]||0) - (gs.points[a.name]||0));
+  const leadName = sorted[0]?.name;
+  const hasPoints = sorted.some(c => (gs.points[c.name]||0) > 0);
+  const [deductInputs, setDeductInputs] = React.useState({});
+
+  return (
+    <div className="flex flex-col min-h-screen p-4 pb-10 gap-4">
+      {/* header */}
+      <div className="glass rounded-[3rem] p-6 shadow-2xl mt-4 pop">
+        <BackBtn onClick={onBack} />
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-[1.2rem] bg-gradient-to-br from-slate-600 to-slate-800
+            flex items-center justify-center shadow-xl">
+            <Icon name="shield-check" size={24} className="text-white" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-black text-white">לוח הורים</h2>
+            <p className="text-white/60 text-xs">{gs.pendingTasks.length} משימות ממתינות לאישור</p>
+          </div>
+        </div>
+      </div>
+
+      {/* scoreboard */}
+      <div className="glass rounded-[3rem] p-6 shadow-2xl pop">
+        <h3 className="text-white font-bold text-base mb-4 flex items-center gap-2">
+          <Icon name="trophy" size={18} className="text-amber-400" />
+          טבלת ניקוד
+        </h3>
+        <div className="flex flex-col gap-2">
+          {sorted.map((child, idx) => (
+            <div key={child.name} className="flex items-center gap-3 p-3 rounded-[1.5rem] bg-white/10">
+              <span className="text-white/50 font-black w-5 text-center text-sm">{idx+1}</span>
+              <div className={`w-9 h-9 rounded-full ${child.bg} flex items-center justify-center
+                text-sm font-black text-white shadow-md`}>
+                {child.initial}
+              </div>
+              <span className="text-white font-bold flex-1 flex items-center gap-2">
+                {child.name}
+                {hasPoints && child.name === leadName &&
+                  <Icon name="crown" size={15} className="text-amber-400" />}
+              </span>
+              <div className="flex items-center gap-1">
+                <span className="text-amber-300 font-black text-sm">{gs.points[child.name]||0}</span>
+                <Icon name="star" size={13} className="text-amber-400" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* passwords */}
+      <div className="glass rounded-[3rem] p-6 shadow-2xl pop">
+        <h3 className="text-white font-bold text-base mb-4 flex items-center gap-2">
+          <Icon name="key" size={18} className="text-sky-400" />
+          קודים סודיים
+        </h3>
+        <div className="flex flex-col gap-2">
+          {CHILDREN.map(child => (
+            <div key={child.name} className="flex items-center gap-3 p-3 rounded-[1.5rem] bg-white/10">
+              <div className={`w-9 h-9 rounded-full ${child.bg} flex items-center justify-center
+                text-sm font-black text-white shadow-md flex-shrink-0`}>
+                {child.initial}
+              </div>
+              <span className="text-white font-bold flex-1">{child.name}</span>
+              <span className="bg-white/15 border border-white/25 text-white font-mono font-black
+                text-base px-4 py-1.5 rounded-full tracking-widest">
+                {gs.pins[child.name] || child.pin}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* deduct points */}
+      <div className="glass rounded-[3rem] p-6 shadow-2xl pop">
+        <h3 className="text-white font-bold text-base mb-4 flex items-center gap-2">
+          <Icon name="minus-circle" size={18} className="text-red-400" />
+          הורדת נקודות
+        </h3>
+        <div className="flex flex-col gap-2">
+          {CHILDREN.map(child => (
+            <div key={child.name} className="flex items-center gap-3 p-3 rounded-[1.5rem] bg-white/10">
+              <div className={`w-9 h-9 rounded-full ${child.bg} flex items-center justify-center
+                text-sm font-black text-white shadow-md flex-shrink-0`}>
+                {child.initial}
+              </div>
+              <span className="text-white font-bold flex-1">{child.name}</span>
+              <input
+                type="number"
+                min="1"
+                value={deductInputs[child.name] || ''}
+                onChange={e => setDeductInputs(prev => ({ ...prev, [child.name]: e.target.value }))}
+                placeholder="כמות"
+                className="w-16 bg-white/10 border border-white/20 text-white text-center font-bold text-sm
+                  rounded-xl px-2 py-1.5 outline-none focus:border-red-400/60"
+              />
+              <button
+                onClick={() => {
+                  onDeduct(child.name, deductInputs[child.name]);
+                  setDeductInputs(prev => ({ ...prev, [child.name]: '' }));
+                }}
+                className="bg-red-500/30 hover:bg-red-500/50 text-red-300 text-xs font-bold
+                  px-3 py-2 rounded-full transition-colors flex items-center gap-1 flex-shrink-0"
+              >
+                <Icon name="minus" size={13} className="text-red-300" />
+                הורד
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* pending */}
+      <p className="text-white/80 font-bold px-2 flex items-center gap-2">
+        <Icon name="clock" size={16} className="text-amber-400" />
+        ממתין לאישור
+        {gs.pendingTasks.length > 0 && (
+          <span className="bg-amber-400 text-slate-900 text-xs font-black px-2 py-0.5 rounded-full">
+            {gs.pendingTasks.length}
+          </span>
+        )}
+      </p>
+
+      {gs.pendingTasks.length === 0 ? (
+        <div className="glass rounded-[2.5rem] p-8 text-center shadow-xl pop">
+          <Icon name="check-circle-2" size={48} className="text-green-400 mx-auto mb-3" />
+          <p className="text-white/80 font-semibold">הכל מאושר! אין משימות ממתינות</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {gs.pendingTasks.map(task => {
+            const child   = CHILDREN.find(c => c.name === task.childName);
+            const taskDef = TASKS.find(t => t.id === task.taskId);
+            return (
+              <div key={task.fbKey} className="glass rounded-[2rem] p-5 shadow-xl flex flex-col gap-3 pop">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-[1.2rem] bg-gradient-to-br ${child?.gradient||'from-gray-500 to-gray-700'}
+                    flex items-center justify-center shadow-md flex-shrink-0`}>
+                    <span className="text-2xl leading-none">{taskDef?.icon || '✓'}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-bold text-sm leading-snug">{task.taskName}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className={`w-3 h-3 rounded-full ${child?.bg||'bg-gray-500'}`} />
+                      <span className="text-white/60 text-xs">{task.childName}</span>
+                      <Icon name="zap" size={11} className="text-amber-400" />
+                      <span className="text-amber-300 text-xs font-bold">{task.taskPoints} נק'</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => onApprove(task)}
+                    className="flex-1 bg-gradient-to-br from-green-500 to-emerald-600 text-white text-sm font-bold
+                      py-2.5 rounded-full shadow-xl active:scale-95 transition-transform flex items-center justify-center gap-1.5"
+                  >
+                    <Icon name="check" size={15} className="text-white" />
+                    אשר
+                  </button>
+                  <button
+                    onClick={() => onReject(task)}
+                    className="flex-1 bg-gradient-to-br from-red-500 to-rose-600 text-white text-sm font-bold
+                      py-2.5 rounded-full shadow-xl active:scale-95 transition-transform flex items-center justify-center gap-1.5"
+                  >
+                    <Icon name="x" size={15} className="text-white" />
+                    דחה
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── App ────────────────────────────────────────────────── */
+function App() {
+  const [view,    setView]    = useState('welcome');
+  const [selUser, setSelUser] = useState(null);
+  const [selRole, setSelRole] = useState(null);
+  const [gs,      setGs]      = useState(null); // null = loading
+
+  /* ── Firebase sync: immediate fetch + SSE real-time + polling fallback */
+  useEffect(() => {
+    let alive = true;
+    let es    = null;
+
+    // Apply raw DB snapshot to state (synchronous)
+    const applyData = (raw) => {
+      if (!alive) return;
+      const data = raw || {};
+      const ptObj = data.pendingTasks || {};
+      const ptArr = Object.entries(ptObj).map(([fbKey, t]) => ({ ...t, fbKey }));
+      setGs({
+        points:       { ...INIT_POINTS, ...(data.points || {}) },
+        pendingTasks: ptArr,
+        pins:         data.pins || {},
+      });
+    };
+
+    // REST fetch helper used for initial load and SSE fallback
+    const fetchAndApply = () =>
+      fbGet()
+        .then(applyData)
+        .catch(err => {
+          console.error('Firebase fetch error:', err);
+          if (alive) setGs(prev => prev ?? { points: INIT_POINTS, pendingTasks: [], pins: {}, dbError: true });
+        });
+
+    // 1️⃣ Immediate REST fetch so the app renders without waiting for SSE
+    const init = async () => {
+      try {
+        const data = (await fbGet()) || {};
+        if (!data.points) await fbPut('points', INIT_POINTS).catch(() => {});
+        applyData(data);
+      } catch(e) {
+        console.error('Init fetch error:', e);
+        if (alive) setGs({ points: INIT_POINTS, pendingTasks: [], pins: {}, dbError: true });
+      }
+    };
+    init();
+
+    // 2️⃣ SSE for instant real-time updates across all devices
+    try {
+      es = new EventSource(`${DB}/.json`);
+
+      es.addEventListener('put', (e) => {
+        if (!alive) return;
+        try {
+          const { path, data } = JSON.parse(e.data);
+          if (path === '/') {
+            applyData(data);           // full snapshot (initial SSE payload)
+          } else {
+            fetchAndApply();           // partial update → refetch full state
+          }
+        } catch (err) {
+          console.error('SSE parse error:', err);
+          fetchAndApply();
+        }
+      });
+
+      es.addEventListener('patch', () => { if (alive) fetchAndApply(); });
+      es.addEventListener('cancel', () => { if (es) { es.close(); es = null; } });
+      es.onerror = () => { if (es) { es.close(); es = null; } }; // polling covers reconnect
+    } catch(e) {
+      // EventSource not supported in this environment – polling below covers it
+    }
+
+    // 3️⃣ Polling fallback (every 3 s) – ensures sync even if SSE is unavailable
+    const timer = setInterval(fetchAndApply, 3000);
+
+    return () => {
+      alive = false;
+      if (es) { es.close(); es = null; }
+      clearInterval(timer);
+    };
+  }, []);
+
+  /* ── Refresh Lucide icons after every render */
+  useEffect(() => { window.lucide?.createIcons(); });
+
+  /* ── Determine effective PIN for a user */
+  const getEffectivePin = (name, role) => {
+    if (role === 'parent') return PARENT_PIN;
+    const customPin = gs?.pins?.[name];
+    if (customPin) return customPin;
+    const child = CHILDREN.find(c => c.name === name);
+    return child?.pin;
+  };
+
+  /* ── Handlers */
+  const handleSelect = (name, role) => {
+    setSelUser(name);
+    setSelRole(role);
+    setView('pin');
+  };
+
+  const handleBack = () => {
+    setView('welcome');
+    setSelUser(null);
+    setSelRole(null);
+  };
+
+  const handleLogin = () => {
+    if (selRole === 'parent') {
+      setView('parentDashboard');
+    } else {
+      // First-time login: no custom PIN set yet → force PIN change
+      const hasCustomPin = gs?.pins?.[selUser];
+      if (!hasCustomPin) {
+        setView('setPin');
+      } else {
+        setView('childDashboard');
+      }
+    }
+  };
+
+  const handleSetPin = async (newPin) => {
+    await fbPatch('pins', { [selUser]: newPin });
+    // Update local state immediately for instant feedback
+    setGs(prev => prev ? { ...prev, pins: { ...prev.pins, [selUser]: newPin } } : prev);
+    setView('childDashboard');
+  };
+
+  const handleChangePinRequest = () => setView('changePin');
+
+  const handleChangePin = async (newPin) => {
+    await fbPatch('pins', { [selUser]: newPin });
+    // Update local state immediately so effectivePin is current
+    setGs(prev => prev ? { ...prev, pins: { ...prev.pins, [selUser]: newPin } } : prev);
+  };
+
+  const handleTask = task => {
+    playSound('done');
+    fbPost('pendingTasks', {
+      taskId:     task.id,
+      taskName:   task.name,
+      taskPoints: task.points,
+      childName:  selUser,
+      timestamp:  new Date().toISOString(),
+    });
+  };
+
+  const handleReject = async task => {
+    await fbDel(`pendingTasks/${task.fbKey}`);
+  };
+
+  const handleApprove = async task => {
+    const newPts = (gs.points[task.childName] || 0) + task.taskPoints;
+    await fbPatch('points', { [task.childName]: newPts });
+    await fbDel(`pendingTasks/${task.fbKey}`);
+    fireConfetti();
+    playSound('approve');
+  };
+
+  const handleDeduct = async (childName, amt) => {
+    const amtInt = parseInt(amt, 10);
+    if (!amtInt || amtInt <= 0) return;
+    const currentPts = gs.points[childName] || 0;
+    const newPts = Math.max(0, currentPts - amtInt);
+    await fbPatch('points', { [childName]: newPts });
+    setGs(prev => prev ? { ...prev, points: { ...prev.points, [childName]: newPts } } : prev);
+  };
+
+  /* ── Render */
+  if (!gs) return <LoadingScreen />;
+  if (gs.dbError) return (
+    <div className="flex items-center justify-center min-h-screen p-5">
+      <div className="glass rounded-[3rem] p-10 shadow-2xl flex flex-col items-center gap-4 max-w-sm w-full text-center">
+        <Icon name="wifi-off" size={48} className="text-red-400" />
+        <p className="text-white font-black text-xl">שגיאת חיבור</p>
+        <p className="text-white/70 text-sm">לא ניתן להתחבר ל-Firebase.<br/>בדוק כללי אבטחה ורשת.</p>
+        <button onClick={() => window.location.reload()}
+          className="bg-gradient-to-br from-blue-500 to-blue-700 text-white font-bold px-6 py-3 rounded-full shadow-lg active:scale-95 transition-transform">
+          נסה שוב
+        </button>
+      </div>
+    </div>
+  );
+
+  const effectivePin = selUser ? getEffectivePin(selUser, selRole) : null;
+  const defaultPin   = selUser && selRole === 'child'
+    ? CHILDREN.find(c => c.name === selUser)?.pin
+    : null;
+
+  return (
+    <div className="max-w-md mx-auto" dir="rtl">
+      {view === 'welcome'         && <WelcomeScreen onSelect={handleSelect} />}
+      {view === 'pin'             && <PinScreen
+                                        userName={selUser}
+                                        userRole={selRole}
+                                        correctPin={effectivePin}
+                                        onBack={handleBack}
+                                        onSuccess={handleLogin}
+                                     />}
+      {view === 'setPin'          && <SetPinScreen
+                                        userName={selUser}
+                                        defaultPin={defaultPin}
+                                        onSetPin={handleSetPin}
+                                        onBack={handleBack}
+                                     />}
+      {view === 'changePin'       && <ChangePinScreen
+                                        userName={selUser}
+                                        currentPin={effectivePin}
+                                        onChangePin={handleChangePin}
+                                        onBack={() => setView('childDashboard')}
+                                     />}
+      {view === 'childDashboard'  && <ChildDashboard
+                                        userName={selUser}
+                                        gs={gs}
+                                        onTask={handleTask}
+                                        onBack={handleBack}
+                                        onChangePinRequest={handleChangePinRequest}
+                                     />}
+      {view === 'parentDashboard' && <ParentDashboard gs={gs} onApprove={handleApprove} onReject={handleReject} onDeduct={handleDeduct} onBack={handleBack} />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
