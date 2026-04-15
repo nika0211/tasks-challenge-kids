@@ -106,9 +106,15 @@ const TASKS = [
   { id:11, name:'סידור מיטה',                     points:1, icon:'🛏️' },
   { id:12, name:'עזרה בהכנת ארוחה',              points:3, icon:'🍳' },
   { id:13, name:'זריקת זבל',                      points:1, icon:'🗑️' },
-  { id:14, name:'להחזיר עגלת סופר למטה',                    points:1, icon:'🛒' },
-  { id:15, name:'הכנת אוכל לבית הספר',                      points:2, icon:'🥪' },
-  { id:16, name:'נסיעה באוטובוס לבית הספר והגעה בזמן',      points:2, icon:'🚌' },
+  { id:14, name:'להחזיר עגלת סופר למטה',         points:1, icon:'🛒' },
+  { id:15, name:'פינוי שולחן שישי',               points:2, icon:'🍽️' },
+  { id:16, name:'עריכת שולחן שישי',               points:1, icon:'🕯️' },
+  { id:17, name:'נקיון מפת שישי',                 points:1, icon:'🧻' },
+  { id:18, name:'שמע ישראל (לבנות)',              points:3, icon:'🙏' },
+  { id:19, name:'נטילת ידיים + ברכה',             points:1, icon:'💧' },
+  { id:20, name:'הנחת תפילין',                    points:3, icon:'✡️' },
+  { id:21, name:'ברכת השחר',                      points:3, icon:'🌅' },
+  { id:22, name:'ברכת המזון',                     points:3, icon:'📖' },
 ];
 const INIT_POINTS = { שקד:0, טוהר:0, אפרת:0, איתן:0 };
 
@@ -948,8 +954,11 @@ function App() {
     if (!amtInt || amtInt <= 0) return;
     const currentPts = gs.points[childName] || 0;
     const newPts = Math.max(0, currentPts - amtInt);
-    await fbPatch('points', { [childName]: newPts });
-    setGs(prev => prev ? { ...prev, points: { ...prev.points, [childName]: newPts } } : prev);
+    try {
+      const res = await fbPatch('points', { [childName]: newPts });
+      if (!res.ok) throw new Error(`Firebase error: ${res.status}`);
+      setGs(prev => prev ? { ...prev, points: { ...prev.points, [childName]: newPts } } : prev);
+    } catch (err) { console.error('handleDeduct', err); }
   };
 
   /* ── Render */
