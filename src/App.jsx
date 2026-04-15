@@ -75,6 +75,13 @@ const TASK_TEMPLATES = [
   { id: 't19', name: 'להחזיר עגלת סופר למטה',                 points: 1, icon: '🛒', category: 'עזרה'   },
   { id: 't20', name: 'הכנת אוכל לבית הספר',                   points: 2, icon: '🥪', category: 'יומי'   },
   { id: 't21', name: 'נסיעה באוטובוס לבית הספר והגעה בזמן',   points: 2, icon: '🚌', category: 'משמעת'  },
+  { id: 't22', name: 'נסיעה באוטובוס לבית הספר',           points: 2, icon: '🚌', category: 'משמעת' },
+  { id: 't23', name: 'הכנת אוכל ושתייה לבית הספר',          points: 2, icon: '🥪', category: 'יומי'  },
+  { id: 't24', name: 'הגדלת ראש',                            points: 1, icon: '💡', category: 'משמעת' },
+  { id: 't25', name: 'לא לצאת מהחדר החל משעה 23:00',         points: 5, icon: '🌙', category: 'משמעת', golden: true },
+  { id: 't26', name: 'לשחק עם שאבי (מינימום 10 דקות)',       points: 1, icon: '🐩', category: 'יומי'  },
+  { id: 't27', name: 'ניקוי אבק חלונות של החדר',             points: 2, icon: '🪟', category: 'בית'   },
+  { id: 't28', name: 'תליית כביסה',                          points: 2, icon: '👕', category: 'בית'   },
 ];
 
 // --- SOUNDS ---
@@ -425,11 +432,17 @@ export default function App() {
               {TASK_TEMPLATES.map(task => {
                 const isPending = !!logs.find(l => l.childId === activeChild.id && l.taskId === task.id && l.status === 'Pending');
                 return (
-                  <div key={task.id} className={`bg-white/90 backdrop-blur-md p-6 rounded-[2rem] shadow-xl border-2 ${isPending ? 'border-amber-400/30 bg-amber-50/50' : 'border-white'} flex items-center justify-between transition-all active:scale-[0.98]`}>
+                  <div key={task.id}
+                    className={`bg-white/90 backdrop-blur-md p-6 rounded-[2rem] shadow-xl border-2 ${task.golden ? 'border-yellow-400 bg-yellow-50/60' : isPending ? 'border-amber-400/30 bg-amber-50/50' : 'border-white'} flex items-center justify-between transition-all active:scale-[0.98]`}
+                    style={task.golden ? { boxShadow: '0 0 18px 5px rgba(251,191,36,0.45), 0 0 36px 10px rgba(251,191,36,0.2)', animation: 'goldShimmerReact 2s ease-in-out infinite' } : {}}
+                  >
                     <div className="flex items-center gap-5">
                       <div className="text-4xl bg-slate-50 w-16 h-16 flex items-center justify-center rounded-2xl shadow-inner">{task.icon}</div>
                       <div>
                         <p className="font-black text-slate-800 text-xl leading-tight">{task.name}</p>
+                        {task.golden && (
+                          <span className="text-[10px] font-black text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded-full mt-1 mb-1 inline-block">⭐ משימת הזהב</span>
+                        )}
                         <div className="flex items-center gap-2 mt-2">
                           <span className="text-xs font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full">{task.points} נקודות</span>
                           <button onClick={() => getShabiTip(task.name)}
