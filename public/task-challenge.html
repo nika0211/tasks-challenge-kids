@@ -1034,13 +1034,15 @@ function ParentDashboard({ gs, onApprove, onReject, onDeduct, onAdd, onBack, onA
             <h2 className="text-2xl font-black text-white">לוח הורים</h2>
             <p className="text-white/60 text-xs">{trulyPending.length} משימות ממתינות לאישור</p>
           </div>
-          <button onClick={onChangeParentPin}
-            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 active:scale-95
-              transition-all px-3 py-2 rounded-2xl border border-white/20 shadow-md">
-            <Icon name="key" size={15} className="text-amber-300" />
-            <span className="text-white/80 text-xs font-bold">שינוי סיסמה</span>
-          </button>
         </div>
+
+        {/* כפתור שינוי סיסמה */}
+        <button onClick={onChangeParentPin}
+          className="mt-4 w-full flex items-center justify-center gap-2 bg-white/10 active:bg-white/20 active:scale-95
+            transition-all py-3 rounded-[1.5rem] border border-white/20 shadow-md">
+          <Icon name="key" size={18} className="text-amber-300" />
+          <span className="text-white font-bold text-sm">שינוי סיסמת הורה</span>
+        </button>
       </div>
 
       {/* scoreboard */}
