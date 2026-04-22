@@ -1,5 +1,8 @@
 {
   "buildCommand": "echo no-build",
   "outputDirectory": "public",
-  "installCommand": "echo no-install"
+  "installCommand": "echo no-install",
+  "routes": [
+    { "src": "/", "dest": "/task-challenge.html" }
+  ]
 }
