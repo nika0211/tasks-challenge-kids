@@ -77,6 +77,16 @@
       margin-top: 3px;
       margin-bottom: 2px;
     }
+    @keyframes prizePopIn {
+      0%   { transform: scale(0.5); opacity: 0; }
+      80%  { transform: scale(1.07); }
+      100% { transform: scale(1);   opacity: 1; }
+    }
+    @keyframes wheelPulse {
+      0%,100% { box-shadow: 0 0 18px 4px rgba(251,191,36,0.5), 0 0 36px 10px rgba(251,191,36,0.2); }
+      50%     { box-shadow: 0 0 32px 8px rgba(251,191,36,0.9), 0 0 64px 18px rgba(251,191,36,0.5); }
+    }
+    .wheel-btn-pulse { animation: wheelPulse 1.6s ease-in-out infinite; }
   </style>
 </head>
 <body>
@@ -147,6 +157,19 @@ const TASKS = [
   { id:29, name:'תליית כביסה',                           points:2, icon:'👕' },
 ];
 const INIT_POINTS = { שקד:0, טוהר:0, אפרת:0, איתן:0 };
+const PRIZES = [
+  '60 דקות זמן מסך',
+  'פטור ממטלה: אבא/אמא עושה משימה אחת במקומך',
+  'בחירת ארוחה: הילד קובע מה כולם אוכלים',
+  'קינוח/ממתק: פינוק מתוק אחרי האוכל',
+  '20 ש"ח כסף מזומן לקופה',
+  'קופון בחירת מקום ישיבה באוטו לשני כיוונים',
+  'ה-DJ של הבית: בחירת המוזיקה בנסיעה או בסלון',
+  'קופון פטור חד-פעמי מסידור המיטה והחדר',
+  'ביקור בבאולינג: שובר ליציאה משפחתית לכיף',
+  'בונוס נקודות: המשימה הבאה שווה פי 2 נקודות',
+];
+const PRIZES_EMOJIS = ['📱','🎭','🍽️','🍰','💰','🚗','🎵','🛏️','🎳','⭐'];
 
 /* ─── Confetti ───────────────────────────────────────────── */
 function fireConfetti() {
@@ -178,6 +201,15 @@ function playSound(type) {
     });
   } catch(e) { /* audio not available */ }
 }
+
+/* ─── Timestamp helpers ──────────────────────────────────── */
+const formatTimestamp = (iso) => {
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+};
+const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+const isWithin24h = (iso) => !!iso && (Date.now() - new Date(iso).getTime() < TWENTY_FOUR_HOURS);
 
 /* ─── Icon ───────────────────────────────────────────────── */
 function Icon({ name, size=20, className='' }) {
@@ -551,14 +583,277 @@ function ChangePinScreen({ userName, currentPin, onChangePin, onBack }) {
   );
 }
 
+/* ─── Change Parent PIN Screen ───────────────────────────── */
+function ChangeParentPinScreen({ currentPin, onChangePin, onBack }) {
+  const [step,   setStep]   = useState(1);
+  const [old,    setOld]    = useState('');
+  const [pin1,   setPin1]   = useState('');
+  const [pin2,   setPin2]   = useState('');
+  const [shake,  setShake]  = useState(false);
+  const [err,    setErr]    = useState('');
+  const [saving, setSaving] = useState(false);
+  const [done,   setDone]   = useState(false);
+
+  useEffect(() => {
+    if (done) {
+      const t = setTimeout(onBack, 1600);
+      return () => clearTimeout(t);
+    }
+  }, [done]);
+
+  const triggerErr = (msg, clearFn) => {
+    setShake(true); setErr(msg); if (clearFn) clearFn();
+    setTimeout(() => { setShake(false); setErr(''); }, 700);
+  };
+
+  const handleStep1 = () => {
+    if (old !== currentPin) { triggerErr('הסיסמה הנוכחית שגויה', () => setOld('')); return; }
+    setStep(2);
+  };
+
+  const handleStep2 = () => {
+    if (pin1.length < 4) { triggerErr('יש להזין 4 ספרות', () => setPin1('')); return; }
+    if (pin1 === currentPin) { triggerErr('הסיסמה החדשה חייבת להיות שונה', () => setPin1('')); return; }
+    setStep(3);
+  };
+
+  const handleStep3 = async () => {
+    if (pin2 !== pin1) { triggerErr('הסיסמאות אינן תואמות', () => setPin2('')); return; }
+    setSaving(true);
+    await onChangePin(pin1);
+    setSaving(false);
+    setDone(true);
+  };
+
+  const curVal    = step === 1 ? old  : step === 2 ? pin1 : pin2;
+  const setCurVal = step === 1 ? setOld : step === 2 ? setPin1 : setPin2;
+  const handleSub = step === 1 ? handleStep1 : step === 2 ? handleStep2 : handleStep3;
+  const stepLabels = ['הזן את הסיסמה הנוכחית', 'בחר סיסמה חדשה (4 ספרות)', 'אשר את הסיסמה החדשה'];
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen p-5">
+      <div className="glass rounded-[3rem] p-8 shadow-2xl w-full max-w-sm pop">
+        {!done && <BackBtn onClick={onBack} />}
+
+        <div className="flex flex-col items-center mb-6">
+          <div className="w-20 h-20 rounded-[2rem] bg-gradient-to-br from-slate-600 to-slate-800
+            flex items-center justify-center shadow-2xl mb-4 relative">
+            <Icon name="shield-check" size={36} className="text-white" />
+            <div className="absolute -bottom-2 -left-2 w-8 h-8 rounded-full bg-amber-400
+              flex items-center justify-center shadow-lg">
+              <Icon name="key" size={14} className="text-white" />
+            </div>
+          </div>
+          <h2 className="text-2xl font-black text-white">שינוי סיסמת הורה</h2>
+          {!done && (
+            <div className="mt-3 px-4 py-2 rounded-2xl bg-amber-400/15 border border-amber-400/30 text-center">
+              <p className="text-amber-300 font-bold text-xs">{stepLabels[step - 1]}</p>
+            </div>
+          )}
+        </div>
+
+        {!done && (
+          <div className="flex items-center justify-center gap-2 mb-5">
+            {[1,2,3].map(s => (
+              <div key={s} className={`h-1.5 w-8 rounded-full transition-all
+                ${step >= s ? 'bg-gradient-to-r from-slate-500 to-amber-400' : 'bg-white/20'}`} />
+            ))}
+          </div>
+        )}
+
+        {done ? (
+          <div className="flex flex-col items-center gap-4 py-6">
+            <div className="w-16 h-16 rounded-full bg-green-400/20 flex items-center justify-center">
+              <Icon name="check-circle-2" size={44} className="text-green-400" />
+            </div>
+            <p className="text-white font-black text-xl text-center">הסיסמה שונתה בהצלחה!</p>
+            <p className="text-white/50 text-sm text-center">חוזר ללוח הורים...</p>
+          </div>
+        ) : saving ? (
+          <div className="flex flex-col items-center gap-3 py-4">
+            <div className="w-10 h-10 rounded-full border-4 border-white/30 border-t-white spin-anim" />
+            <p className="text-white/70 text-sm">שומר סיסמה...</p>
+          </div>
+        ) : (
+          <div className={shake ? 'shake' : ''}>
+            {err && <p className="text-red-300 text-sm font-bold text-center mb-3">{err}</p>}
+            <PinPad
+              value={curVal}
+              onChange={setCurVal}
+              onSubmit={handleSub}
+              accentGradient="from-slate-500 to-amber-400"
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Prize Wheel ────────────────────────────────────────── */
+function PrizeWheel({ childName, currentMilestone, onClose }) {
+  const [spinning,  setSpinning]  = useState(false);
+  const [wonPrize,  setWonPrize]  = useState(null);
+  const wheelRef = useRef(null);
+  const SEG = 36; // 360 / 10
+  const COLORS = ['#f59e0b','#3b82f6','#ec4899','#10b981','#8b5cf6','#ef4444','#f97316','#06b6d4','#84cc16','#a855f7'];
+  const conicGrad = COLORS.map((c, i) => `${c} ${i*SEG}deg ${(i+1)*SEG}deg`).join(', ');
+
+  const spin = () => {
+    if (spinning || wonPrize) return;
+    const idx = Math.floor(Math.random() * 10);
+    const targetDeg = 5 * 360 + (idx * SEG + SEG / 2);
+    setSpinning(true);
+    if (wheelRef.current) {
+      wheelRef.current.style.transition = 'transform 4.2s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
+      wheelRef.current.style.transform  = `rotate(${targetDeg}deg)`;
+    }
+    setTimeout(async () => {
+      setWonPrize(PRIZES[idx]);
+      fireConfetti();
+      playSound('approve');
+      await fbPatch('wheelMilestones', { [childName]: currentMilestone });
+      await fbDel(`wheelRequests/${childName}`);
+      setSpinning(false);
+    }, 4400);
+  };
+
+  return (
+    <div style={{
+      position:'fixed', inset:0, zIndex:9999,
+      background:'rgba(10,10,40,0.82)',
+      backdropFilter:'blur(8px)',
+      display:'flex', alignItems:'center', justifyContent:'center',
+      padding:'16px',
+    }}>
+      {wonPrize ? (
+        <div style={{animation:'prizePopIn 0.5s ease forwards'}}
+          className="glass rounded-[3rem] p-8 max-w-sm w-full text-center shadow-2xl">
+          <div style={{fontSize:'56px', marginBottom:'12px'}}>🎉</div>
+          <h3 className="text-white font-black text-2xl mb-2">כל הכבוד!</h3>
+          <p className="text-white/60 text-sm mb-1">הפרס שלך הוא:</p>
+          <div className="glass rounded-[1.5rem] p-4 mb-6 mt-2">
+            <p className="text-amber-300 font-black text-lg leading-snug">{wonPrize}</p>
+          </div>
+          <p className="text-white/50 text-xs mb-5">הראה להורה את הפרס כדי לממש אותו 😊</p>
+          <button
+            onClick={onClose}
+            className="bg-gradient-to-br from-amber-400 to-amber-600 text-white font-black
+              px-8 py-3 rounded-full shadow-xl active:scale-95 transition-transform text-lg"
+          >
+            יאהוו! 🎊
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-5 w-full max-w-sm">
+          <h3 className="text-white font-black text-2xl text-center">🎡 גלגל הפרסים</h3>
+          <p className="text-amber-300/90 text-sm text-center font-semibold">
+            סיבוב חינמי על הגעה ל-{currentMilestone} נקודות!
+          </p>
+
+          {/* Wheel */}
+          <div style={{position:'relative', width:'280px', height:'280px', flexShrink:0}}>
+            {/* Pointer triangle */}
+            <div style={{
+              position:'absolute', top:'-4px', left:'50%',
+              transform:'translateX(-50%)',
+              zIndex:10, width:0, height:0,
+              borderLeft:'13px solid transparent',
+              borderRight:'13px solid transparent',
+              borderTop:'26px solid #fbbf24',
+              filter:'drop-shadow(0 2px 4px rgba(0,0,0,0.5))',
+            }}/>
+            {/* Spinning wheel */}
+            <div
+              ref={wheelRef}
+              style={{
+                width:'280px', height:'280px',
+                borderRadius:'50%',
+                background:`conic-gradient(${conicGrad})`,
+                border:'4px solid rgba(255,255,255,0.3)',
+                boxShadow:'0 0 28px rgba(251,191,36,0.35)',
+                position:'relative',
+                overflow:'hidden',
+              }}
+            >
+              {/* Emoji labels on each segment */}
+              {PRIZES_EMOJIS.map((emoji, i) => {
+                const angleDeg = i * SEG + SEG / 2;
+                const angleRad = (angleDeg - 90) * Math.PI / 180;
+                const r = 96;
+                const x = 140 + r * Math.cos(angleRad);
+                const y = 140 + r * Math.sin(angleRad);
+                return (
+                  <div key={i} style={{
+                    position:'absolute',
+                    left: x, top: y,
+                    transform:`translate(-50%,-50%) rotate(${angleDeg}deg)`,
+                    fontSize:'20px',
+                    lineHeight:1,
+                    pointerEvents:'none',
+                    filter:'drop-shadow(0 1px 2px rgba(0,0,0,0.6))',
+                  }}>
+                    {emoji}
+                  </div>
+                );
+              })}
+              {/* Center circle */}
+              <div style={{
+                position:'absolute', top:'50%', left:'50%',
+                transform:'translate(-50%,-50%)',
+                width:'44px', height:'44px',
+                borderRadius:'50%',
+                background:'rgba(255,255,255,0.95)',
+                zIndex:5,
+                display:'flex', alignItems:'center', justifyContent:'center',
+                fontSize:'22px',
+                boxShadow:'0 2px 8px rgba(0,0,0,0.3)',
+              }}>🎡</div>
+            </div>
+          </div>
+
+          <button
+            onClick={spin}
+            disabled={spinning}
+            className={`font-black px-12 py-4 rounded-full shadow-2xl text-xl
+              transition-transform text-white
+              ${spinning
+                ? 'opacity-50 cursor-not-allowed bg-slate-600'
+                : 'bg-gradient-to-br from-amber-400 to-amber-600 active:scale-95 wheel-btn-pulse'}`}
+          >
+            {spinning ? 'מסתובב... 🌀' : 'סובב! 🎯'}
+          </button>
+
+          {!spinning && (
+            <button
+              onClick={onClose}
+              className="text-white/40 text-sm hover:text-white/70 transition-colors"
+            >
+              סגור
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Child Dashboard ────────────────────────────────────── */
 function ChildDashboard({ userName, gs, onTask, onBack, onChangePinRequest }) {
   const child    = CHILDREN.find(c => c.name === userName);
   const myPoints = gs.points[userName] || 0;
-  const pendingIds = new Set(
-    gs.pendingTasks.filter(t => t.childName === userName).map(t => t.taskId)
-  );
-  const [justDone, setJustDone] = useState(null);
+  const myRecentTasks = gs.pendingTasks.filter(t => t.childName === userName && isWithin24h(t.timestamp));
+  const pendingIds  = new Set(myRecentTasks.filter(t => !t.status || t.status === 'Pending').map(t => t.taskId));
+  const approvedIds = new Set(myRecentTasks.filter(t => t.status === 'Approved').map(t => t.taskId));
+  const rejectedIds = new Set(myRecentTasks.filter(t => t.status === 'Rejected').map(t => t.taskId));
+  const getTaskLog  = id => myRecentTasks.find(t => t.taskId === id);
+  const [justDone,  setJustDone]  = useState(null);
+  const [showWheel, setShowWheel] = useState(false);
+
+  const lastClaimed      = gs.wheelMilestones?.[userName] || 0;
+  const currentMilestone = Math.floor(myPoints / 100) * 100;
+  const hasFreeSpin      = myPoints >= 100 && currentMilestone > lastClaimed;
+  const wheelRequest     = gs.wheelRequests?.[userName] || null;
 
   const handle = task => {
     setJustDone(task.id);
@@ -566,8 +861,20 @@ function ChildDashboard({ userName, gs, onTask, onBack, onChangePinRequest }) {
     onTask(task);
   };
 
+  const handleRequestSpin = () => {
+    fbPatch('wheelRequests', { [userName]: 'pending' });
+  };
+
   return (
     <div className="flex flex-col min-h-screen p-4 pb-10 gap-4">
+      {showWheel && (
+        <PrizeWheel
+          childName={userName}
+          currentMilestone={currentMilestone}
+          onClose={() => setShowWheel(false)}
+        />
+      )}
+
       {/* header */}
       <div className="glass rounded-[3rem] p-6 shadow-2xl mt-4 pop">
         <BackBtn onClick={onBack} />
@@ -594,11 +901,49 @@ function ChildDashboard({ userName, gs, onTask, onBack, onChangePinRequest }) {
         </div>
       </div>
 
+      {/* Prize wheel banners */}
+      {hasFreeSpin && !wheelRequest && (
+        <button
+          onClick={handleRequestSpin}
+          className="glass rounded-[2rem] p-5 shadow-2xl wheel-btn-pulse text-center w-full"
+        >
+          <div className="text-3xl mb-1">🎡</div>
+          <p className="text-white font-black text-base">הגעת ל-{currentMilestone} נקודות!</p>
+          <p className="text-amber-300 font-semibold text-sm mt-1">לחץ לבקש סיבוב חינמי בגלגל הפרסים</p>
+        </button>
+      )}
+
+      {hasFreeSpin && wheelRequest === 'pending' && (
+        <div className="glass rounded-[2rem] p-5 shadow-xl text-center">
+          <div className="text-3xl mb-1">⏳</div>
+          <p className="text-white font-bold text-base">הבקשה נשלחה להורה!</p>
+          <p className="text-white/60 text-sm mt-1">ממתין לאישור... הגלגל יפתח בקרוב</p>
+        </div>
+      )}
+
+      {hasFreeSpin && wheelRequest === 'approved' && (
+        <button
+          onClick={() => setShowWheel(true)}
+          className="glass rounded-[2rem] p-5 shadow-2xl wheel-btn-pulse text-center w-full"
+        >
+          <div className="text-3xl mb-1">🎉</div>
+          <p className="text-white font-black text-base">ההורה אישר!</p>
+          <p className="text-amber-300 font-semibold text-sm mt-1">לחץ לסובב את גלגל הפרסים!</p>
+        </button>
+      )}
+
       <p className="text-white/80 font-bold px-2">משימות זמינות:</p>
 
       <div className="flex flex-col gap-3">
         {TASKS.map(task => {
-          const isPending = pendingIds.has(task.id);
+          const isPending  = pendingIds.has(task.id);
+          const isApproved = approvedIds.has(task.id);
+          const isRejected = rejectedIds.has(task.id);
+          const log = (isPending || isApproved || isRejected) ? getTaskLog(task.id) : null;
+          const iconBg = isPending  ? 'bg-amber-400/30'
+                       : isApproved ? 'bg-green-400/30'
+                       : isRejected ? 'bg-red-400/30'
+                       : `bg-gradient-to-br ${child.gradient}`;
           return (
             <div
               key={task.id}
@@ -606,8 +951,7 @@ function ChildDashboard({ userName, gs, onTask, onBack, onChangePinRequest }) {
                 ${justDone === task.id ? 'scale-95 opacity-50' : 'pop'}
                 ${task.golden ? 'golden-task' : ''}`}
             >
-              <div className={`w-12 h-12 rounded-[1.2rem] flex items-center justify-center shadow-md
-                flex-shrink-0 ${isPending ? 'bg-amber-400/30' : `bg-gradient-to-br ${child.gradient}`}`}>
+              <div className={`w-12 h-12 rounded-[1.2rem] flex items-center justify-center shadow-md flex-shrink-0 ${iconBg}`}>
                 <span className="text-2xl leading-none">{task.icon}</span>
               </div>
 
@@ -620,12 +964,34 @@ function ChildDashboard({ userName, gs, onTask, onBack, onChangePinRequest }) {
                   <Icon name="zap" size={12} className="text-amber-400" />
                   <span className="text-amber-300 text-xs font-bold">{task.points} נקודות</span>
                 </div>
+                {log && (
+                  <p className="text-white/45 text-xs mt-0.5">בוצע ב: {formatTimestamp(log.timestamp)}</p>
+                )}
               </div>
 
               {isPending ? (
                 <div className="flex items-center gap-1.5 bg-amber-400/20 px-3 py-2 rounded-full flex-shrink-0">
                   <Icon name="clock" size={14} className="text-amber-400" />
                   <span className="text-amber-300 text-xs font-bold">ממתין</span>
+                </div>
+              ) : isApproved ? (
+                <div className="flex items-center gap-1.5 bg-green-400/20 px-3 py-2 rounded-full flex-shrink-0">
+                  <Icon name="check-circle-2" size={14} className="text-green-400" />
+                  <span className="text-green-300 text-xs font-bold">אושר ✓</span>
+                </div>
+              ) : isRejected ? (
+                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                  <div className="flex items-center gap-1 bg-red-400/20 px-3 py-1.5 rounded-full">
+                    <Icon name="x-circle" size={13} className="text-red-400" />
+                    <span className="text-red-300 text-xs font-bold">נדחה</span>
+                  </div>
+                  <button
+                    onClick={() => handle(task)}
+                    className={`bg-gradient-to-br ${child.gradient} text-white text-xs font-bold
+                      px-4 py-1.5 rounded-full shadow-lg active:scale-90 transition-transform`}
+                  >
+                    שוב
+                  </button>
                 </div>
               ) : (
                 <button
@@ -645,11 +1011,14 @@ function ChildDashboard({ userName, gs, onTask, onBack, onChangePinRequest }) {
 }
 
 /* ─── Parent Dashboard ───────────────────────────────────── */
-function ParentDashboard({ gs, onApprove, onReject, onDeduct, onBack }) {
+function ParentDashboard({ gs, onApprove, onReject, onDeduct, onAdd, onBack, onApproveWheel, onRejectWheel, onChangeParentPin }) {
   const sorted   = [...CHILDREN].sort((a,b) => (gs.points[b.name]||0) - (gs.points[a.name]||0));
   const leadName = sorted[0]?.name;
   const hasPoints = sorted.some(c => (gs.points[c.name]||0) > 0);
   const [deductInputs, setDeductInputs] = React.useState({});
+  const [addInputs, setAddInputs] = React.useState({});
+  const trulyPending = gs.pendingTasks.filter(t => (!t.status || t.status === 'Pending') && isWithin24h(t.timestamp));
+  const historyTasks = gs.pendingTasks.filter(t => (t.status === 'Approved' || t.status === 'Rejected') && isWithin24h(t.timestamp));
 
   return (
     <div className="flex flex-col min-h-screen p-4 pb-10 gap-4">
@@ -661,10 +1030,16 @@ function ParentDashboard({ gs, onApprove, onReject, onDeduct, onBack }) {
             flex items-center justify-center shadow-xl">
             <Icon name="shield-check" size={24} className="text-white" />
           </div>
-          <div>
+          <div className="flex-1">
             <h2 className="text-2xl font-black text-white">לוח הורים</h2>
-            <p className="text-white/60 text-xs">{gs.pendingTasks.length} משימות ממתינות לאישור</p>
+            <p className="text-white/60 text-xs">{trulyPending.length} משימות ממתינות לאישור</p>
           </div>
+          <button onClick={onChangeParentPin}
+            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 active:scale-95
+              transition-all px-3 py-2 rounded-2xl border border-white/20 shadow-md">
+            <Icon name="key" size={15} className="text-amber-300" />
+            <span className="text-white/80 text-xs font-bold">שינוי סיסמה</span>
+          </button>
         </div>
       </div>
 
@@ -753,30 +1128,108 @@ function ParentDashboard({ gs, onApprove, onReject, onDeduct, onBack }) {
                 <Icon name="minus" size={13} className="text-red-300" />
                 הורד
               </button>
+              <input
+                type="number"
+                min="1"
+                value={addInputs[child.name] || ''}
+                onChange={e => setAddInputs(prev => ({ ...prev, [child.name]: e.target.value }))}
+                placeholder="כמות"
+                className="w-16 bg-white/10 border border-white/20 text-white text-center font-bold text-sm
+                  rounded-xl px-2 py-1.5 outline-none focus:border-green-400/60"
+              />
+              <button
+                onClick={() => {
+                  onAdd(child.name, addInputs[child.name]);
+                  setAddInputs(prev => ({ ...prev, [child.name]: '' }));
+                }}
+                className="bg-green-500/30 hover:bg-green-500/50 text-green-300 text-xs font-bold
+                  px-3 py-2 rounded-full transition-colors flex items-center gap-1 flex-shrink-0"
+              >
+                <Icon name="plus" size={13} className="text-green-300" />
+                הוסף
+              </button>
             </div>
           ))}
         </div>
       </div>
 
+      {/* wheel requests */}
+      {Object.entries(gs.wheelRequests || {}).filter(([, s]) => s === 'pending').length > 0 && (<>
+        <p className="text-white/80 font-bold px-2 flex items-center gap-2">
+          <span>🎡</span>
+          בקשות גלגל פרסים
+          <span className="bg-purple-400 text-white text-xs font-black px-2 py-0.5 rounded-full">
+            {Object.entries(gs.wheelRequests || {}).filter(([, s]) => s === 'pending').length}
+          </span>
+        </p>
+        <div className="flex flex-col gap-3">
+          {Object.entries(gs.wheelRequests || {})
+            .filter(([, s]) => s === 'pending')
+            .map(([childName]) => {
+              const child = CHILDREN.find(c => c.name === childName);
+              const pts   = gs.points[childName] || 0;
+              const milestone = Math.floor(pts / 100) * 100;
+              return (
+                <div key={childName} className="glass rounded-[2rem] p-5 shadow-xl flex flex-col gap-3 pop">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-[1.2rem] bg-gradient-to-br ${child?.gradient||'from-gray-500 to-gray-700'}
+                      flex items-center justify-center shadow-md flex-shrink-0 text-2xl`}>
+                      🎡
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-bold text-sm">
+                        {childName} מבקש לסובב את גלגל הפרסים!
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <Icon name="star" size={12} className="text-amber-400" />
+                        <span className="text-amber-300 text-xs font-bold">{pts} נקודות</span>
+                        <span className="text-white/40 text-xs">• הגיע ל-{milestone}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onApproveWheel(childName)}
+                      className="flex-1 bg-gradient-to-br from-purple-500 to-purple-700 text-white text-sm font-bold
+                        py-2.5 rounded-full shadow-xl active:scale-95 transition-transform flex items-center justify-center gap-1.5"
+                    >
+                      <Icon name="check" size={15} className="text-white" />
+                      אשר סיבוב
+                    </button>
+                    <button
+                      onClick={() => onRejectWheel(childName)}
+                      className="flex-1 bg-gradient-to-br from-red-500 to-rose-600 text-white text-sm font-bold
+                        py-2.5 rounded-full shadow-xl active:scale-95 transition-transform flex items-center justify-center gap-1.5"
+                    >
+                      <Icon name="x" size={15} className="text-white" />
+                      דחה
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      </>)}
+
       {/* pending */}
       <p className="text-white/80 font-bold px-2 flex items-center gap-2">
         <Icon name="clock" size={16} className="text-amber-400" />
         ממתין לאישור
-        {gs.pendingTasks.length > 0 && (
+        {trulyPending.length > 0 && (
           <span className="bg-amber-400 text-slate-900 text-xs font-black px-2 py-0.5 rounded-full">
-            {gs.pendingTasks.length}
+            {trulyPending.length}
           </span>
         )}
       </p>
 
-      {gs.pendingTasks.length === 0 ? (
+      {trulyPending.length === 0 ? (
         <div className="glass rounded-[2.5rem] p-8 text-center shadow-xl pop">
           <Icon name="check-circle-2" size={48} className="text-green-400 mx-auto mb-3" />
           <p className="text-white/80 font-semibold">הכל מאושר! אין משימות ממתינות</p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {gs.pendingTasks.map(task => {
+          {trulyPending.map(task => {
             const child   = CHILDREN.find(c => c.name === task.childName);
             const taskDef = TASKS.find(t => t.id === task.taskId);
             return (
@@ -794,6 +1247,9 @@ function ParentDashboard({ gs, onApprove, onReject, onDeduct, onBack }) {
                       <Icon name="zap" size={11} className="text-amber-400" />
                       <span className="text-amber-300 text-xs font-bold">{task.taskPoints} נק'</span>
                     </div>
+                    {task.timestamp && (
+                      <p className="text-white/45 text-xs mt-0.5">בוצע ב: {formatTimestamp(task.timestamp)}</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -819,6 +1275,48 @@ function ParentDashboard({ gs, onApprove, onReject, onDeduct, onBack }) {
           })}
         </div>
       )}
+
+      {historyTasks.length > 0 && (<>
+        <p className="text-white/80 font-bold px-2 flex items-center gap-2 mt-2">
+          <Icon name="history" size={16} className="text-white/50" />
+          היסטוריה (24 שעות)
+        </p>
+        <div className="flex flex-col gap-3">
+          {historyTasks.map(task => {
+            const child   = CHILDREN.find(c => c.name === task.childName);
+            const taskDef = TASKS.find(t => t.id === task.taskId);
+            const isApproved = task.status === 'Approved';
+            return (
+              <div key={task.fbKey} className="glass rounded-[2rem] p-5 shadow-xl flex items-center gap-4 pop opacity-80">
+                <div className={`w-12 h-12 rounded-[1.2rem] bg-gradient-to-br ${child?.gradient||'from-gray-500 to-gray-700'}
+                  flex items-center justify-center shadow-md flex-shrink-0`}>
+                  <span className="text-2xl leading-none">{taskDef?.icon || '✓'}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-bold text-sm leading-snug">{task.taskName}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className={`w-3 h-3 rounded-full ${child?.bg||'bg-gray-500'}`} />
+                    <span className="text-white/60 text-xs">{task.childName}</span>
+                    <Icon name="zap" size={11} className="text-amber-400" />
+                    <span className="text-amber-300 text-xs font-bold">{task.taskPoints} נק'</span>
+                  </div>
+                  {task.timestamp && (
+                    <p className="text-white/45 text-xs mt-0.5">בוצע ב: {formatTimestamp(task.timestamp)}</p>
+                  )}
+                </div>
+                <div className={`flex items-center gap-1.5 px-3 py-2 rounded-full flex-shrink-0
+                  ${isApproved ? 'bg-green-400/20' : 'bg-red-400/20'}`}>
+                  <Icon name={isApproved ? 'check-circle-2' : 'x-circle'} size={14}
+                    className={isApproved ? 'text-green-400' : 'text-red-400'} />
+                  <span className={`text-xs font-bold ${isApproved ? 'text-green-300' : 'text-red-300'}`}>
+                    {isApproved ? 'אושר' : 'נדחה'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </>)}
     </div>
   );
 }
@@ -842,9 +1340,12 @@ function App() {
       const ptObj = data.pendingTasks || {};
       const ptArr = Object.entries(ptObj).map(([fbKey, t]) => ({ ...t, fbKey }));
       setGs({
-        points:       { ...INIT_POINTS, ...(data.points || {}) },
-        pendingTasks: ptArr,
-        pins:         data.pins || {},
+        points:          { ...INIT_POINTS, ...(data.points || {}) },
+        pendingTasks:    ptArr,
+        pins:            data.pins || {},
+        wheelMilestones: data.wheelMilestones || {},
+        wheelRequests:   data.wheelRequests   || {},
+        parentPin:       data.parentPin || null,
       });
     };
 
@@ -854,7 +1355,7 @@ function App() {
         .then(applyData)
         .catch(err => {
           console.error('Firebase fetch error:', err);
-          if (alive) setGs(prev => prev ?? { points: INIT_POINTS, pendingTasks: [], pins: {}, dbError: true });
+          if (alive) setGs(prev => prev ?? { points: INIT_POINTS, pendingTasks: [], pins: {}, wheelMilestones: {}, wheelRequests: {}, parentPin: null, dbError: true });
         });
 
     // 1️⃣ Immediate REST fetch so the app renders without waiting for SSE
@@ -863,9 +1364,16 @@ function App() {
         const data = (await fbGet()) || {};
         if (!data.points) await fbPut('points', INIT_POINTS).catch(() => {});
         applyData(data);
+        // Delete pendingTasks entries older than 24h to keep DB lean
+        const cutoff = Date.now() - TWENTY_FOUR_HOURS;
+        Object.entries(data.pendingTasks || {}).forEach(([key, t]) => {
+          if (t.timestamp && new Date(t.timestamp).getTime() < cutoff) {
+            fbDel(`pendingTasks/${key}`).catch(() => {});
+          }
+        });
       } catch(e) {
         console.error('Init fetch error:', e);
-        if (alive) setGs({ points: INIT_POINTS, pendingTasks: [], pins: {}, dbError: true });
+        if (alive) setGs({ points: INIT_POINTS, pendingTasks: [], pins: {}, wheelMilestones: {}, wheelRequests: {}, parentPin: null, dbError: true });
       }
     };
     init();
@@ -911,7 +1419,7 @@ function App() {
 
   /* ── Determine effective PIN for a user */
   const getEffectivePin = (name, role) => {
-    if (role === 'parent') return PARENT_PIN;
+    if (role === 'parent') return gs?.parentPin || PARENT_PIN;
     const customPin = gs?.pins?.[name];
     if (customPin) return customPin;
     const child = CHILDREN.find(c => c.name === name);
@@ -960,6 +1468,11 @@ function App() {
     setGs(prev => prev ? { ...prev, pins: { ...prev.pins, [selUser]: newPin } } : prev);
   };
 
+  const handleChangeParentPin = async (newPin) => {
+    await fbPatch('', { parentPin: newPin });
+    setGs(prev => prev ? { ...prev, parentPin: newPin } : prev);
+  };
+
   const handleTask = task => {
     playSound('done');
     fbPost('pendingTasks', {
@@ -968,17 +1481,18 @@ function App() {
       taskPoints: task.points,
       childName:  selUser,
       timestamp:  new Date().toISOString(),
+      status:     'Pending',
     });
   };
 
   const handleReject = async task => {
-    await fbDel(`pendingTasks/${task.fbKey}`);
+    await fbPatch(`pendingTasks/${task.fbKey}`, { status: 'Rejected' });
   };
 
   const handleApprove = async task => {
     const newPts = (gs.points[task.childName] || 0) + task.taskPoints;
     await fbPatch('points', { [task.childName]: newPts });
-    await fbDel(`pendingTasks/${task.fbKey}`);
+    await fbPatch(`pendingTasks/${task.fbKey}`, { status: 'Approved' });
     fireConfetti();
     playSound('approve');
   };
@@ -993,6 +1507,26 @@ function App() {
       if (!res.ok) throw new Error(`Firebase error: ${res.status}`);
       setGs(prev => prev ? { ...prev, points: { ...prev.points, [childName]: newPts } } : prev);
     } catch (err) { console.error('handleDeduct', err); }
+  };
+
+  const handleAdd = async (childName, amt) => {
+    const amtInt = parseInt(amt, 10);
+    if (!amtInt || amtInt <= 0) return;
+    const currentPts = gs.points[childName] || 0;
+    const newPts = currentPts + amtInt;
+    try {
+      const res = await fbPatch('points', { [childName]: newPts });
+      if (!res.ok) throw new Error(`Firebase error: ${res.status}`);
+      setGs(prev => prev ? { ...prev, points: { ...prev.points, [childName]: newPts } } : prev);
+    } catch (err) { console.error('handleAdd', err); }
+  };
+
+  const handleApproveWheel = (childName) => {
+    fbPatch('wheelRequests', { [childName]: 'approved' });
+  };
+
+  const handleRejectWheel = (childName) => {
+    fbDel(`wheelRequests/${childName}`);
   };
 
   /* ── Render */
@@ -1045,7 +1579,12 @@ function App() {
                                         onBack={handleBack}
                                         onChangePinRequest={handleChangePinRequest}
                                      />}
-      {view === 'parentDashboard' && <ParentDashboard gs={gs} onApprove={handleApprove} onReject={handleReject} onDeduct={handleDeduct} onBack={handleBack} />}
+      {view === 'parentDashboard' && <ParentDashboard gs={gs} onApprove={handleApprove} onReject={handleReject} onDeduct={handleDeduct} onAdd={handleAdd} onBack={handleBack} onApproveWheel={handleApproveWheel} onRejectWheel={handleRejectWheel} onChangeParentPin={() => setView('changeParentPin')} />}
+      {view === 'changeParentPin' && <ChangeParentPinScreen
+                                        currentPin={gs?.parentPin || PARENT_PIN}
+                                        onChangePin={handleChangeParentPin}
+                                        onBack={() => setView('parentDashboard')}
+                                     />}
     </div>
   );
 }
