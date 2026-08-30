@@ -849,6 +849,9 @@ function ChildDashboard({ userName, gs, onTask, onBack, onChangePinRequest }) {
   const getTaskLog  = id => myRecentTasks.find(t => t.taskId === id);
   const [justDone,  setJustDone]  = useState(null);
   const [showWheel, setShowWheel] = useState(false);
+  const [showAllTasks, setShowAllTasks] = useState(false);
+  const todayTasks = TASKS.slice(0, 5);
+  const otherTasks = TASKS.slice(5);
 
   const lastClaimed      = gs.wheelMilestones?.[userName] || 0;
   const currentMilestone = Math.floor(myPoints / 100) * 100;
@@ -865,77 +868,8 @@ function ChildDashboard({ userName, gs, onTask, onBack, onChangePinRequest }) {
     fbPatch('wheelRequests', { [userName]: 'pending' });
   };
 
-  return (
-    <div className="flex flex-col min-h-screen p-4 pb-10 gap-4">
-      {showWheel && (
-        <PrizeWheel
-          childName={userName}
-          currentMilestone={currentMilestone}
-          onClose={() => setShowWheel(false)}
-        />
-      )}
 
-      {/* header */}
-      <div className="glass rounded-[3rem] p-6 shadow-2xl mt-4 pop">
-        <BackBtn onClick={onBack} />
-        <div className="flex items-center gap-4">
-          <div className={`w-16 h-16 rounded-[1.5rem] bg-gradient-to-br ${child.gradient}
-            flex items-center justify-center text-2xl font-black text-white shadow-xl`}>
-            {child.initial}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-2xl font-black text-white">שלום, {userName}!</h2>
-            <div className="flex items-center gap-1.5 mt-1">
-              <Icon name="star" size={16} className="text-amber-400" />
-              <span className="text-amber-300 font-bold text-lg">{myPoints} נקודות</span>
-            </div>
-            {/* Change password link */}
-            <button
-              onClick={onChangePinRequest}
-              className="flex items-center gap-1 mt-2 text-white/40 hover:text-white/70 transition-colors"
-            >
-              <Icon name="key" size={12} className="text-white/40" />
-              <span className="text-xs">שינוי קוד סודי</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Prize wheel banners */}
-      {hasFreeSpin && !wheelRequest && (
-        <button
-          onClick={handleRequestSpin}
-          className="glass rounded-[2rem] p-5 shadow-2xl wheel-btn-pulse text-center w-full"
-        >
-          <div className="text-3xl mb-1">🎡</div>
-          <p className="text-white font-black text-base">הגעת ל-{currentMilestone} נקודות!</p>
-          <p className="text-amber-300 font-semibold text-sm mt-1">לחץ לבקש סיבוב חינמי בגלגל הפרסים</p>
-        </button>
-      )}
-
-      {hasFreeSpin && wheelRequest === 'pending' && (
-        <div className="glass rounded-[2rem] p-5 shadow-xl text-center">
-          <div className="text-3xl mb-1">⏳</div>
-          <p className="text-white font-bold text-base">הבקשה נשלחה להורה!</p>
-          <p className="text-white/60 text-sm mt-1">ממתין לאישור... הגלגל יפתח בקרוב</p>
-        </div>
-      )}
-
-      {hasFreeSpin && wheelRequest === 'approved' && (
-        <button
-          onClick={() => setShowWheel(true)}
-          className="glass rounded-[2rem] p-5 shadow-2xl wheel-btn-pulse text-center w-full"
-        >
-          <div className="text-3xl mb-1">🎉</div>
-          <p className="text-white font-black text-base">ההורה אישר!</p>
-          <p className="text-amber-300 font-semibold text-sm mt-1">לחץ לסובב את גלגל הפרסים!</p>
-        </button>
-      )}
-
-      <p className="text-white/80 font-bold px-2">משימות זמינות:</p>
-
-      <div className="flex flex-col gap-3">
-        {TASKS.map(task => {
+  const renderTaskCard = task => {
           const isPending  = pendingIds.has(task.id);
           const isApproved = approvedIds.has(task.id);
           const isRejected = rejectedIds.has(task.id);
@@ -1004,8 +938,108 @@ function ChildDashboard({ userName, gs, onTask, onBack, onChangePinRequest }) {
               )}
             </div>
           );
-        })}
+  };
+  return (
+    <div className="flex flex-col min-h-screen p-4 pb-10 gap-4">
+      {showWheel && (
+        <PrizeWheel
+          childName={userName}
+          currentMilestone={currentMilestone}
+          onClose={() => setShowWheel(false)}
+        />
+      )}
+
+      {/* header */}
+      <div className="glass rounded-[3rem] p-6 shadow-2xl mt-4 pop">
+        <BackBtn onClick={onBack} />
+        <div className="flex items-center gap-4">
+          <div className={`w-16 h-16 rounded-[1.5rem] bg-gradient-to-br ${child.gradient}
+            flex items-center justify-center text-2xl font-black text-white shadow-xl`}>
+            {child.initial}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-2xl font-black text-white">שלום, {userName}!</h2>
+            <div className="flex items-center gap-1.5 mt-1">
+              <Icon name="star" size={16} className="text-amber-400" />
+              <span className="text-amber-300 font-bold text-lg">{myPoints} נקודות</span>
+            </div>
+            {/* Change password link */}
+            <button
+              onClick={onChangePinRequest}
+              className="flex items-center gap-1 mt-2 text-white/40 hover:text-white/70 transition-colors"
+            >
+              <Icon name="key" size={12} className="text-white/40" />
+              <span className="text-xs">שינוי קוד סודי</span>
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* Prize wheel banners */}
+      {hasFreeSpin && !wheelRequest && (
+        <button
+          onClick={handleRequestSpin}
+          className="glass rounded-[2rem] p-5 shadow-2xl wheel-btn-pulse text-center w-full"
+        >
+          <div className="text-3xl mb-1">🎡</div>
+          <p className="text-white font-black text-base">הגעת ל-{currentMilestone} נקודות!</p>
+          <p className="text-amber-300 font-semibold text-sm mt-1">לחץ לבקש סיבוב חינמי בגלגל הפרסים</p>
+        </button>
+      )}
+
+      {hasFreeSpin && wheelRequest === 'pending' && (
+        <div className="glass rounded-[2rem] p-5 shadow-xl text-center">
+          <div className="text-3xl mb-1">⏳</div>
+          <p className="text-white font-bold text-base">הבקשה נשלחה להורה!</p>
+          <p className="text-white/60 text-sm mt-1">ממתין לאישור... הגלגל יפתח בקרוב</p>
+        </div>
+      )}
+
+      {hasFreeSpin && wheelRequest === 'approved' && (
+        <button
+          onClick={() => setShowWheel(true)}
+          className="glass rounded-[2rem] p-5 shadow-2xl wheel-btn-pulse text-center w-full"
+        >
+          <div className="text-3xl mb-1">🎉</div>
+          <p className="text-white font-black text-base">ההורה אישר!</p>
+          <p className="text-amber-300 font-semibold text-sm mt-1">לחץ לסובב את גלגל הפרסים!</p>
+        </button>
+      )}
+
+      <div className="flex items-center justify-between px-2">
+        <div>
+          <p className="text-white font-black text-lg">המשימות שלי להיום</p>
+          <p className="text-white/50 text-xs mt-0.5">עד 5 משימות ממוקדות</p>
+        </div>
+        <span className="bg-white/15 border border-white/20 text-white font-black text-sm px-3 py-1.5 rounded-full">
+          {todayTasks.length}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        {todayTasks.map(renderTaskCard)}
+      </div>
+
+      <button
+        onClick={() => setShowAllTasks(value => !value)}
+        className="glass rounded-[2rem] p-4 shadow-xl w-full flex items-center gap-3 active:scale-95 transition-transform"
+        aria-expanded={showAllTasks}
+      >
+        <div className="w-10 h-10 rounded-[1.2rem] bg-white/15 flex items-center justify-center">
+          <Icon name="list" size={20} className="text-white" />
+        </div>
+        <span className="text-white font-black flex-1 text-right">כל המשימות</span>
+        <span className="text-white/50 text-xs font-bold">
+          {showAllTasks ? 'הסתר' : 'הצג עוד 24'}
+        </span>
+        <Icon name={showAllTasks ? 'chevron-up' : 'chevron-down'} size={18} className="text-white/60" />
+      </button>
+
+      {showAllTasks && (
+        <div className="flex flex-col gap-3">
+          {otherTasks.map(renderTaskCard)}
+        </div>
+      )}
     </div>
   );
 }
